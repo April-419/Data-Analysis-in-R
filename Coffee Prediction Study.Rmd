@@ -1,0 +1,86 @@
+---
+title: "Coffee Prediction Study"
+author: "Jianing"
+date: "2023-02-20"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r}
+library(GGally)
+library(ggplot2)
+dt <- read.csv("/Users/jianingjin/Desktop/IEMS_304/Lab5/coffee_data.csv")
+```
+
+```{r}
+#(2)
+ggpairs(dt, column = c("Aroma_level", "Acidity_level", "Flavor_level", "Aftertaste_level"), ggplot2:: aes(color = Coffee_Origin)) +ggtitle("Pairplot of Coffee Flavor Features")
+```
+
+```{r}
+#(3)
+dt2 <- dt[-c(1, 2, 5, 6, 12)]
+dt2 <- dt2[complete.cases(dt2),]
+dt2 <- as.data.frame(dt2)
+tapply(dt2$Est.Price, dt2$Coffee_Origin, summary)
+```
+
+```{r}
+tapply(dt2$Aroma_level, dt2$Coffee_Origin, summary)
+```
+```{r}
+tapply(dt2$Rating, dt2$Coffee_Origin, summary)
+```
+```{r}
+tapply(dt2$Acidity_level, dt2$Coffee_Origin, summary)
+```
+```{r}
+tapply(dt2$Flavor_level, dt2$Coffee_Origin, summary)
+```
+```{r}
+tapply(dt2$Aftertaste_level, dt2$Coffee_Origin, summary)
+```
+```{r}
+tapply(dt2$Quality, dt2$Coffee_Origin, summary)
+```
+
+```{r}
+#(4)
+ggplot(dt2, aes(Coffee_Origin, Aroma_level, fill = Coffee_Origin)) + geom_boxplot() +ggtitle("Boxplot of Aroma Level by Coffee_Origin")
+ggplot(dt2, aes(Coffee_Origin, Rating, fill = Coffee_Origin)) + geom_boxplot() + ggtitle("Boxplot of Rating by Coffee_Origin")
+ggplot(dt2, aes(Coffee_Origin, Acidity_level, fill = Coffee_Origin)) + geom_boxplot() + ggtitle("Boxplot of Acidity Level by Coffee_Origin")
+ggplot(dt2, aes(Coffee_Origin, Flavor_level, fill = Coffee_Origin)) + geom_boxplot() + ggtitle("Boxplot of Flavor Level by Coffee_Origin")
+ggplot(dt2, aes(Coffee_Origin, Aftertaste_level, fill = Coffee_Origin)) + geom_boxplot() + ggtitle("Boxplot of Aftertaste Level by Coffee_Origin")
+ggplot(dt2, aes(Coffee_Origin, Est.Price, fill = Coffee_Origin)) + geom_boxplot() + ggtitle("Boxplot of Est.Price by Coffee_Origin")
+ggplot(dt2, aes(Coffee_Origin, Quality, fill = Coffee_Origin)) + geom_boxplot() + ggtitle("Boxplot of Quality by Coffee_Origin")
+#we could see that in the boxplot of aroma level, the median is very close to the upper lever and the upper levels of four different regions are quite same. The same situation is also in the boxplot of acidity level and aftertaste level. It demonstrates that our data of those levels are very concentrated.
+```
+```{r}
+#(5)
+library(reshape)
+dt3 <- dt2[, -c(2)]
+cor1 <- round(cor(dt3), 2)
+cor1
+melt1 <- melt(cor1)
+melt1
+```
+```{r}
+#(6)
+ggplot(melt1, aes(x = X1, y = X2, fill = value)) +
+  geom_tile(color = "black") +
+  geom_text(aes(label = value), color = "black", size = 4) +
+  scale_fill_gradient(low = "white", high = "red") +
+  coord_fixed() + ggtitle("Correlation Heatmap of Munerical Coffee Data")
+```
+```{r}
+#(7)
+library(randomForest)
+```
+```{r}
+dt <- dt[complete.cases(dt),]
+dt$Coffee_Origin = factor(dt$Coffee_Origin)
+rf <- randomForest(Coffee_Origin ~., data = dt, importance = TRUE, proximity = TRUE)
+rf
+```
+
