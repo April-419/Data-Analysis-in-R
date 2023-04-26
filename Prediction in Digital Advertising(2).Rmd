@@ -1,0 +1,210 @@
+---
+title: "Prediction in Digital Advertising (2)"
+author: "Jianing"
+date: "2023-03-01"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+library(glmnet)
+library(broom)
+library(tidyverse)
+library(fastDummies)
+setwd("/Users/jianingjin/Desktop/IEMS_304/lab2/")
+load("p4_AdData.RData")
+```
+
+```{r}
+#same as data processing in (1)
+#original data processing
+head(dataTrainAll)
+#step1: transfer to dataframe
+DataTrainingSet = as.data.frame(dataTrainAll)
+#step 2: select features
+DataTrainingSet = DataTrainingSet[c('Region', 'City', 'AdX', 'Domain', 'Key_Page', 'Ad_Vis', 'Ad_Form', 'Ad_Width', 'Ad_Height', 'Floor_Price', 'Click')] 
+#step 3: transfer categorical data to dummy variables
+DataTrainingSet = dummy_cols(DataTrainingSet, c('Region', 'City', 'AdX', 'Domain', 'Key_Page', 'Ad_Vis', 'Ad_Form'), remove_first_dummy = TRUE) #k - 1 dummies
+#delete original categorical data
+delete = c('Region', 'City', 'AdX', 'Domain', 'Key_Page', 'Ad_Vis', 'Ad_Form')
+DataTrainingSet <- DataTrainingSet[,!(names(DataTrainingSet) %in% delete)]
+head(DataTrainingSet)
+#step 4: standardize numerical data: transfer to z-score [(xi-x.bar)/sd]
+process = scale(DataTrainingSet[, c("Ad_Width", "Ad_Height", "Floor_Price")])
+head(process)
+#delete & bind data
+Click = as.factor(ifelse(DataTrainingSet$Click > 0, 1, 0))
+dt1 = cbind(Click, DataTrainingSet)
+dt2 = cbind(process, dt1)
+dt3 = dt2[ , -(5:8)]
+#final dataset
+head(dt3)
+```
+
+```{r}
+#Q1
+#part a
+#determine x and y
+set.seed(1)
+x = model.matrix(Click~.,data=dt3)[, -1] 
+y = dt3$Click
+#ridge
+#step 1: use glmnet to fit the model
+fit.ridge = glmnet(x, y, alpha = 0, family = "binomial", standardize = FALSE)
+dim(coef(fit.ridge)) #number of coefficients
+#step2: viz lambda and features
+plot(fit.ridge,xvar="lambda",label=TRUE)
+#step 3: use CV to choose best lambda
+cv.ridge=cv.glmnet(x,y,alpha=0, family = "binomial", standardize = FALSE)
+plot(cv.ridge)
+names(cv.ridge)
+bestlam.ridge1 = cv.ridge$lambda.min #best lambda
+#use the best lambda to choose the best model
+ridge1 = glmnet(x, y, alpha = 0, family = "binomial", lambda = bestlam.ridge1, standardize = FALSE)
+predict(fit.ridge, type = "coefficients", s = bestlam.ridge1)[1:22, ]
+```
+
+```{r}
+#lasso
+fit.lasso = glmnet(x, y, alpha = 1, family = "binomial", standardize = FALSE)
+dim(coef(fit.lasso))
+plot(fit.lasso,xvar="lambda",label=TRUE)
+cv.ridge=cv.glmnet(x,y,alpha=1, family = "binomial", standardize = FALSE)
+plot(cv.ridge)
+bestlam.lasso1 = cv.ridge$lambda.min #best lambda
+lasso1 = glmnet(x, y, alpha = 0, family = "binomial", lambda = bestlam.lasso1, standardize = FALSE)
+predict(fit.lasso, type = "coefficients", s = bestlam.lasso1)[1:22, ]
+```
+
+```{r}
+#part b
+#due to the lasso and ridge regression, the feature Ad_Width is more important than others, because it has the largest coefficient in every model with every different lambda in both lasso and ridge regression.
+```
+
+```{r}
+#part c
+#ridge
+cv.ridge.5 = cv.glmnet(x, y, alpha = 0, family = "binomial", standardize = FALSE,  nfolds = 5)
+plot(cv.ridge.5)
+bestlam.ridge2 = cv.ridge.5$lambda.min #best lambda
+ridge2 = glmnet(x, y, alpha = 0, family = "binomial", lambda = bestlam.ridge2, standardize = FALSE)
+predict(fit.ridge, type = "coefficients", s = bestlam.ridge2)[1:22, ]
+```
+
+```{r}
+#lasso
+cv.lasso.5 = cv.glmnet(x, y, alpha = 1, family = "binomial", standardize = FALSE,  nfolds = 5)
+plot(cv.lasso.5)
+bestlam.lasso2 = cv.lasso.5$lambda.min #best lambda
+lasso2 = glmnet(x, y, alpha = 0, family = "binomial", lambda = bestlam.lasso2, standardize = FALSE)
+predict(fit.lasso, type = "coefficients", s = bestlam.lasso2)[1:22, ]
+
+#larger degree of freedom will be overfitting
+```
+
+```{r}
+#part d
+#step 1: transfer to dataframe
+dataTest = data.frame(dataTest)
+#step 2: select features
+dataTest = dataTest[c('Region', 'City', 'AdX', 'Domain', 'Key_Page', 'Ad_Vis', 'Ad_Form', 'Ad_Width', 'Ad_Height', 'Floor_Price')] 
+#step 3: transfer categorical data to dummy variables
+dataTest = dummy_cols(dataTest, c('Region', 'City', 'AdX', 'Domain', 'Key_Page', 'Ad_Vis', 'Ad_Form'), remove_first_dummy = TRUE) #k - 1 dummies
+#delete original categorical data
+delete = c('Region', 'City', 'AdX', 'Domain', 'Key_Page', 'Ad_Vis', 'Ad_Form')
+dataTest = dataTest[,!(names(dataTest) %in% delete)]
+head(dataTest)
+#step 4: standardize numerical data: transfer to z-score [(xi-x.bar)/sd]
+process.test = scale(dataTest[, c("Ad_Width", "Ad_Height", "Floor_Price")])
+head(process.test)
+#delete & bind data
+dt.bind1 = cbind(process.test, dataTest)
+head(dt.bind1)
+testing.data = dt.bind1[ , -(4:6)]
+#final dataset
+head(testing.data)
+```
+
+```{r}
+testing.data = as.matrix(testing.data)
+TrueClicks = ifelse(dataTestRes$Click > 0, 1, 0)
+#ridge
+test.ridge = glmnet(x, y, lambda = bestlam.ridge2, family = "binomial", alpha = 0, standardize = FALSE)
+test.ridge.pred = predict(test.ridge, testing.data, type = "response", s = bestlam.ridge2)
+test.ridge.result = ifelse(test.ridge.pred > 0.5, 1, 0)
+table(test.ridge.result, TrueClicks)
+(20+238)/(9658+238+20+84)
+```
+
+```{r}
+test.lasso = glmnet(x, y, lambda = bestlam.lasso2, family = "binomial", alpha = 1, standardize = FALSE)
+test.lasso.pred = predict(test.lasso, testing.data, type = "response", s = bestlam.lasso2)
+test.lasso.result = ifelse(test.lasso.pred > 0.5, 1, 0)
+table(test.lasso.result, TrueClicks)
+(23+235)/(9655+87)
+```
+
+```{r}
+#Q2
+trainingset = scale(dataTrainAll[, c("AdX", "iPinYou_Bid", "Comp_Bid")])
+head(trainingset)
+```
+```{r}
+#part a
+#construct linear model
+trainingset = as.data.frame(trainingset)
+lm1 = lm(Comp_Bid~AdX+iPinYou_Bid, data = trainingset)
+summary(lm1)
+```
+```{r}
+#part b
+x = model.matrix(Comp_Bid~.,data=trainingset)[, -1] 
+y = trainingset$Comp_Bid
+glmnet.linear = glmnet(x, y, alpha = 1, family = "gaussian")
+cv.lasso=cv.glmnet(x,y)
+plot(glmnet.linear, label = T, main = "Lasso Coefficients")
+plot(glmnet.linear, xvar = "lambda", label = T, main = "Lasso Coefficients")
+#plot(glmnet.linear, xvar = "lambda", label = T, main = "Lasso Coefficients")
+plot(cv.lasso)
+coef(cv.lasso)
+names(cv.lasso)
+bestlam = cv.lasso$lambda.min #best lambda
+predict(glmnet.linear, type = "coefficients", s = bestlam)
+```
+```{r}
+#part c
+mle_coef = coef(lm1)
+half_norm = 0.5 * mle_coef
+lasso_coef = coef(glmnet.linear, s = half_norm) #s: lambda
+```
+
+```{r}
+beta1 = seq(-.5,1,length.out=100)
+beta2 = seq(-.5,1,length.out=100)
+mse = function(beta1, beta2){
+  y_pred = x %*% c(beta1, beta2)
+  mean((y - y_pred)^2)
+}
+```
+
+```{r}
+mse_grid = matrix(0, nrow = length(beta1), ncol = length(beta2))
+for (i in seq_along(beta1)){
+  for (j in seq_along(beta2)) {
+    mse_grid[i, j] = mse(beta1[i], beta2[j])
+  }
+}
+```
+
+```{r}
+mse_grid
+```
+```{r}
+contour(beta1, beta2, mse_grid, levels = seq(0, 2, by = 0.2), xlab = "beta1", ylab = beta2, main = "MSE contour plot")
+
+points(mle_coef[1], mle_coef[2], col = "red", pch = 16)
+points(lasso_coef[1], lasso_coef[2], col = "blue", pch = 16)
+abline(h = 0, v = 0, lty = 2, col = "grey")
+```
+
