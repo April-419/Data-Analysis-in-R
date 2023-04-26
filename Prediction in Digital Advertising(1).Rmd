@@ -1,0 +1,180 @@
+---
+title: "Prediction in Digital Advertising (1)"
+author: "Jianing"
+date: "2023-02-18"
+output:
+  html_document:
+    df_print: paged
+---
+```{r}
+library(ISLR)
+library(tidyr)
+library(fastDummies)
+library(boot)
+setwd("/Users/jianingjin/Desktop/IEMS_304/lab2/")
+load("p4_AdData.RData")
+```
+
+```{r}
+#Q1
+#original data processing
+head(dataTrainAll)
+#step1: transfer to dataframe
+DataTrainingSet = as.data.frame(dataTrainAll)
+#step 2: select features
+DataTrainingSet = DataTrainingSet[c('Region', 'City', 'AdX', 'Domain', 'Key_Page', 'Ad_Vis', 'Ad_Form', 'Ad_Width', 'Ad_Height', 'Floor_Price', 'Click')] 
+#step 3: transfer categorical data to dummy variables
+DataTrainingSet = dummy_cols(DataTrainingSet, c('Region', 'City', 'AdX', 'Domain', 'Key_Page', 'Ad_Vis', 'Ad_Form'), remove_first_dummy = TRUE) #k - 1 dummies
+#delete original categorical data
+delete = c('Region', 'City', 'AdX', 'Domain', 'Key_Page', 'Ad_Vis', 'Ad_Form')
+DataTrainingSet <- DataTrainingSet[,!(names(DataTrainingSet) %in% delete)]
+head(DataTrainingSet)
+```
+
+```{r}
+#step 4: standardize numerical data: transfer to z-score [(xi-x.bar)/sd]
+process = scale(DataTrainingSet[, c("Ad_Width", "Ad_Height", "Floor_Price")])
+head(process)
+```
+
+```{r}
+#delete & bind data
+#turn factor; convert everything to factor first
+Click = as.factor(
+ifelse(DataTrainingSet$Click > 0, 1, 0))
+dt1 = cbind(Click, DataTrainingSet)
+dt2 = cbind(process, dt1)
+dt3 = dt2[ , -(5:8)]
+#final dataset
+head(dt3)
+```
+
+```{r}
+#part a
+#fit the model with all features
+glm1 = glm(Click ~., data =  dt3, family = "binomial")
+summary(glm1)
+#part b
+#according to the results, we could see that Ad_Width and Ad_Height play the most significant role with the least p-value. Therefore, we could reject the null hypothesis that they are not correlated. Also, they all have large coefficients: 3.41 and 1.87 respectively.
+```
+```{r}
+#part c
+set.seed(1)
+#1-feature model
+glm.1f = glm(Click~Ad_Height, data = dt3, family = binomial)
+cv.1f = cv.glm(dt3, glm.1f, K = 10)
+error1 = cv.1f$delta
+error1
+```
+
+```{r}
+#5-feature model
+glm.5f = glm(Click~Ad_Width + Ad_Height + `Domain_trqRTuT-GNTYJNKbuKz`  + Region_6 + City_2, data = dt3, family = binomial)
+cv.5f = cv.glm(dt3, glm.5f, K = 10)
+error2 = cv.5f$delta
+error2
+```
+
+```{r}
+#10 feature model
+glm.10f = glm(Click~Ad_Width + Ad_Height + `Domain_trqRTuT-GNTYJNKbuKz`  + Region_6 + City_2 + Key_Page_9f4e2f16b6873a7eb504df6f61b24044 + Domain_trqRTudNXqN8ggc4JKTI + Region_3 + Key_Page_df6f61b2409f4e2f16b6873a7eb50444 + Ad_Vis_1, data = dt3, family = binomial)
+cv.10f = cv.glm(dt3, glm.10f, K = 10)
+error3 = cv.10f$delta
+error3
+```
+
+```{r}
+#15 feature model
+glm.15f = glm(Click~Ad_Width + Ad_Height + `Domain_trqRTuT-GNTYJNKbuKz`  + Region_6 + City_2 + Key_Page_9f4e2f16b6873a7eb504df6f61b24044 + Domain_trqRTudNXqN8ggc4JKTI + Region_3 + Key_Page_df6f61b2409f4e2f16b6873a7eb50444 + Ad_Vis_1 + Ad_Vis_2 + Ad_Form_1 + City_4 + Domain_5KFUl5p0Gxsvgmd4wspENpn + Domain_trqRTu5Jg9q9wMKYvmpENpn, data = dt3, family = binomial)
+cv.15f = cv.glm(dt3, glm.15f, K = 10)
+error4 = cv.15f$delta
+error4
+```
+
+```{r}
+#plot estimated testing error
+cv.21f = cv.glm(dt3, glm1, K = 10)
+error5 = cv.21f$delta
+x = c(1, 5, 10, 15, 21)
+unadjuested.testing.error = c(error1[1], error2[1], error3[1], error4[1], error5[1])
+plot(x, unadjuested.testing.error, type = "b", col = "black", xlab = "Number of Features", ylab = "Estimated Testing Error", main = "Unadjuested Estimated Testing Error")
+```
+
+```{r}
+adjuested.testing.error = c(error1[2], error2[2], error3[2], error4[2], error5[2])
+plot(x, adjuested.testing.error, type = "b", col = "orange", xlab = "Number of Features", ylab = "Estimated Testing Error", main = "Adjuested Estimated Testing Error")
+```
+
+```{r}
+#because in the first try, I alter the data using the original dataset (without rename), therefore, when I change the dataset name and start my second try, some original features in the original dataset are changed forever. But the first try is not going wrong. Therefore, the following codes just can not work well but the outcome is right. 
+#WARNING! Rename when changing original dataset!!!
+#part d
+#step 1: transfer to dataframe
+dataTest = data.frame(dataTest)
+#step 2: select features
+dataTest = dataTest[c('Region', 'City', 'AdX', 'Domain', 'Key_Page', 'Ad_Vis', 'Ad_Form', 'Ad_Width', 'Ad_Height', 'Floor_Price')] 
+#step 3: transfer categorical data to dummy variables
+dataTest = dummy_cols(dataTest, c('Region', 'City', 'AdX', 'Domain', 'Key_Page', 'Ad_Vis', 'Ad_Form'), remove_first_dummy = TRUE) #k - 1 dummies
+#delete original categorical data
+delete = c('Region', 'City', 'AdX', 'Domain', 'Key_Page', 'Ad_Vis', 'Ad_Form')
+dataTest = dataTest[,!(names(dataTest) %in% delete)]
+```
+```{r}
+head(dataTest)
+```
+
+```{r}
+#step 4: standardize numerical data: transfer to z-score [(xi-x.bar)/sd]
+process.test = scale(dataTest[, c("Ad_Width", "Ad_Height", "Floor_Price")])
+head(process.test)
+#delete & bind data
+dt.bind1 = cbind(process.test, dataTest)
+head(dt.bind1)
+testing.data = dt.bind1[ , -(4:6)]
+#final dataset
+head(testing.data)
+```
+```{r}
+#True Clicks (in dataTestRes)
+TrueClicks = ifelse(dataTestRes$Click > 0, 1, 0)
+test.predict10 = predict(glm.10f, testing.data, type = "response")
+test.predict10.result = ifelse(test.predict10 > 0.5, 1, 0)
+table(test.predict10.result, TrueClicks)
+```
+
+```{r}
+#misclassification rate
+(27+230)/(9651+230+27+92)
+```
+```{r}
+#false positive
+27/(27+9651)
+#false negative
+230/(230+92)
+#result: the false negative rate is very high and the threshold should be lower.
+```
+```{r}
+#Q2
+#part a
+#Standardize numerical data
+trainingset = scale(dataTrainAll[, c("AdX", "iPinYou_Bid", "Comp_Bid")])
+head(trainingset)
+```
+```{r}
+#construct linear model
+trainingset = as.data.frame(trainingset)
+lm1 = lm(Comp_Bid~AdX+iPinYou_Bid, data = trainingset)
+summary(lm1)
+```
+```{r}
+#part b
+#iPinYou_Bid seems to be more important than AdX, because it's larger coefficient and absolute t-value. But both two features and significant enough to reject the null hypothesis.
+```
+
+```{r}
+#part c
+glm.linear = glm(Comp_Bid~AdX+iPinYou_Bid, data = trainingset)
+cv.lm1 = cv.glm(trainingset, glm.linear, K = 10)
+cv.lm1$delta
+```
+
