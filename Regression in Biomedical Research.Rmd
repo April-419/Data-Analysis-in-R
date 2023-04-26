@@ -1,0 +1,138 @@
+---
+title: "Regression in Biomedical Research"
+author: "Jianing"
+date: "2023-02-20"
+output:
+  html_document:
+    df_print: paged
+---
+R has two native data formats—Rdata (sometimes shortened to Rda) and Rds. These formats are used when R objects are saved for later use. Rdata is used to save multiple R objects, while Rds is used to save a single R object.
+```{r}
+dt <- readRDS("/Users/jianingjin/Desktop/IEMS_304/lab4/Trp63.tf.rds")
+head(dt)
+library(glmnet)
+library(Matrix)
+dim(dt)
+```
+
+```{r}
+#Part 1 LASSO Regression
+#(1)
+x <- model.matrix(Trp63~., data = dt)[, -1]
+y <- dt$Trp63
+#?
+grid <- 10^seq(2, -2, length = 100)
+set.seed(1)
+train <- sample(1:nrow(x), nrow(x)/2) #x training
+test <- (-train) #x testing
+y.test <- y[test] #y testing
+```
+
+```{r}
+set.seed(1)
+cv.out <- cv.glmnet(x[train,], y[train], alpha = 1)
+plot(cv.out)
+```
+```{r}
+bestlamda <- cv.out$lambda.min
+bestlamda
+```
+The which() function in R returns the position or the index of the value which satisfies the given condition. The which() function in R gives you the position of the value in a logical vector. The position can be of anything like rows, columns and even vector as well.
+```{r}
+#(2)
+lasso.mod <- glmnet(x[train,], y[train], alpha = 1, lambda = bestlamda)
+lasso.mod$beta[which(lasso.mod$beta != 0),] #beta: coefficients
+```
+```{r}
+#(3)
+lasso.pred <- predict(lasso.mod, s = bestlamda, x[test, ])
+mean((lasso.pred - y.test)^2)
+```
+
+```{r}
+#Part 2: Decision Trees
+#Q1
+library(tree)
+dt2 = data.frame(dt) #alter dataset to dataframe
+model.tree = tree(Trp63 ~ ., data = dt2, subset = train)
+summary(model.tree)
+```
+```{r}
+#Q2
+plot(model.tree)
+text(model.tree, pretty = 0)
+```
+The par() function is used to set or query graphical parameters. We can divide the frame into the desired grid, add a margin to the plot or change the background color of the frame by using the par() function. We can use the par() function in R to create multiple plots at once.
+```{r}
+#Q3
+set.seed(1)
+cv_out = cv.tree(model.tree)
+par(mfrow = c(1, 2)) #function about lay out, makes plot in a same page
+#plot(cv_out$dev, cv.out$size, type = "b")
+#plot(cv_out$dev, cv.out$k, type = "b")
+plot(cv_out$size, cv.out$dev, type = "b")
+plot(cv_out$k, cv.out$dev, type = "b")
+```
+```{r}
+which(cv_out$dev == min(cv_out$dev))
+min(cv_out$dev)
+```
+```{r}
+fit_prune <- prune.tree(model.tree, which(cv_out$dev == min(cv_out$dev)))
+summary(fit_prune)
+plot(fit_prune)
+text(fit_prune, pretty = 0)
+```
+
+```{r}
+pred_prune = predict(fit_prune, dt[-train, ])
+test = dt[-train, "Trp63"]
+plot(pred_prune, test)
+abline(0, 1)
+mean((pred_prune - test)^2)
+```
+
+```{r}
+#Q4
+library(randomForest)
+set.seed(1)
+fit_bag = randomForest(Trp63~., data = dt, subset = train, mtry = 225, importance = T)
+```
+```{r}
+pred_bag = predict(fit_bag, dt[-train,])
+plot(pred_bag, test)
+abline(0, 1)
+mean((pred_bag - test)^2)
+```
+
+```{r}
+#Q5
+set.seed(1)
+fit_rf = randomForest(
+  Trp63~., data = dt, subset = train, mtry = 76, importance = T
+)
+```
+
+```{r}
+pred_rf = predict(fit_rf, dt[-train, ])
+mean((pred_rf - test)^2)
+```
+
+```{r}
+#Q6
+head(importance(fit_rf))
+```
+Conclusion
+Q1: In reality, we would not focus only on one gene (e.g., Trp63) in our research. If we want to
+extend one method to build a network including all other genes of our interests, from the results
+above, which method would you choose to further apply? Why?
+A: RandomForest. Beacuse this method has the smallest MSE.
+
+
+Q2: After trying out all these regression methods, do you observe any consistency in the
+regression results?xf What would you propose to be the most significant regulator genes for our gene
+of interests Trp63?
+A: Tfap2b
+In Lasso regression, Tfap2b has the largest coefficient.
+In Tree method, Tfap2b is in the first decision node every time.
+In RandomForest, Tfap2b has the largest importance.
