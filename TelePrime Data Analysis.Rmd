@@ -1,0 +1,184 @@
+---
+title: "TelePrime Data Analysis"
+author: "Jianing"
+date: "2023-02-18"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r}
+#(1)
+telco <- read.csv("/Users/jianingjin/Desktop/IEMS_304/lab3/churn.csv")
+```
+
+```{r}
+#(2)
+# Cases that are INCOMPLETE
+dim(telco[!complete.cases(telco),])
+# assigning getting rid of incomplete data points
+telco = telco[complete.cases(telco),]
+```
+```{r}
+#(3)
+barplot(table(telco$Churn))
+```
+```{r}
+#(4)
+counts1 = table(telco$Churn, telco$gender)
+barplot(counts1, legend = rownames(counts1),main="Churn x Gender Breakdown")
+
+counts2 = table(telco$Churn, telco$SeniorCitizen)
+barplot(counts2, legend = rownames(counts2),main="Churn x SeniorCitizen Breakdown")
+
+counts3 = table(telco$Churn, telco$Partner)
+barplot(counts3, legend = rownames(counts3),main="Churn x Partner Breakdown")
+
+counts4 = table(telco$Churn, telco$Dependents)
+barplot(counts4, legend = rownames(counts4),main="Churn x Dependents Breakdown")
+
+```
+```{r}
+#(5)
+boxplot(telco[telco$Churn == "No",]$tenure,data=telco)
+boxplot(telco[telco$Churn == "Yes",]$tenure,data=telco)
+```
+```{r}
+boxplot(telco[telco$Churn == "No",]$MonthlyCharges, data = telco)
+boxplot(telco[telco$Churn == "Yes",]$MonthlyCharges, data = telco)
+boxplot(telco[telco$Churn == "No",]$TotalCharges, data = telco)
+boxplot(telco[telco$Churn == "Yes",]$TotalCharges, data = telco)
+```
+```{r}
+#(6)
+cor(telco[,c("tenure", "TotalCharges", "MonthlyCharges", "Metric1", "Metric2")])
+```
+```{r}
+#(8)
+telco[telco == "No internet service"] <- "No"
+telco[telco == "No phone service"] <- "No"
+```
+
+```{r}
+#(9)
+#df[cols] <- lapply(df[cols], FUN) !only in column
+num_columns <- c(6, 19, 20, 21, 22)
+telco[num_columns] <- sapply(telco[num_columns], as.numeric)
+telco_int <- telco[, num_columns]
+telco_int <- data.frame(scale(telco_int))
+telco_int$Metric3 = scale(telco_int$Metric1*telco_int$Metric2)
+```
+
+```{r}
+#(10)
+telco$tenure_bin = telco$tenure
+telco$tenure_bin[telco$tenure_bin > 0 & telco$tenure_bin <= 12] <- '0-1 year'
+telco$tenure_bin[telco$tenure_bin > 12 & telco$tenure_bin <= 24] <- '1-2 years'
+telco$tenure_bin[telco$tenure_bin > 24 & telco$tenure_bin <= 36] <- '2-3 years'
+telco$tenure_bin[telco$tenure_bin > 36 & telco$tenure_bin <= 48] <- '3-4 years'
+telco$tenure_bin[telco$tenure_bin > 48 & telco$tenure_bin <= 60] <- '4-5 years'
+telco$tenure_bin[telco$tenure_bin > 60 & telco$tenure_bin <= 72] <- '5-6 years'
+telco$tenure_bin <- as.factor(telco$tenure_bin) # convert it to factor so that R knows it's categorical
+telco$tenure = NULL # delete tenure col
+```
+
+```{r}
+#(11)
+telco_cat = telco[,-c(1,3,18,19,20,21)]
+dummy<- data.frame(sapply(telco_cat,
+                          function(x) 
+                          data.frame(model.matrix(~x-1,data =telco_cat))[,-1]))
+head(dummy)
+```
+```{r}
+#(12)
+telco_final <- cbind(telco_int, dummy) # combine telco_int and dummy horizontally
+head(telco_final)
+```
+
+```{r}
+#(13)
+install.packages("caTools")
+library("caTools")
+```
+
+```{r}
+indices = sample.split(telco_final$Churn, 0.7)
+train = telco_final[indices,]
+validation = telco_final[!(indices),]
+```
+
+```{r}
+#(14)
+model_1 = glm(Churn~., data = train, family = "binomial") 
+summary(model_1)
+```
+
+```{r}
+library(MASS)
+model_2<- stepAIC(model_1, direction="both")
+summary(model_2)
+```
+
+```{r}
+#(15)
+model_3 <- glm(formula = Churn ~ tenure+MonthlyCharges+Metric1+Metric2+Metric3+
+                 Contract.xOne.year+Contract.xTwo.year+tenure_bin.x3.4.years+
+                 tenure_bin.x4.5.years+tenure_bin.x5.6.years+MultipleLines+
+                 InternetService.xFiber.optic+InternetService.xNo+StreamingTV +
+                 PaperlessBilling, family = "binomial", data = train)
+summary(model_3)
+final_model <- model_3
+```
+```{r}
+#(17)
+pred <- predict(final_model, type = "response", newdata = validation)
+summary(pred)
+```
+
+```{r}
+pred_churn <- factor(ifelse(pred >= 0.5, "Yes", "No")) 
+actual_churn <- factor(ifelse(validation$Churn == 1, "Yes", "No")) 
+performance = table(actual_churn,pred_churn)
+performance
+```
+```{r}
+#(18)
+accuracy <- (1416+337)/(1416+337+133+184)
+Sensitivity <- 377/(184+377)
+Specificity <- 1416/(1416+133)
+accuracy
+Sensitivity
+Specificity
+```
+```{r}
+#(19)
+pred_churn2 <- factor(ifelse(pred >= 0.45, "Yes", "No")) 
+actual_churn2 <- factor(ifelse(validation$Churn == 1, "Yes", "No")) 
+performance2 = table(actual_churn2,pred_churn2)
+performance2
+```
+```{r}
+accuracy2 <- (1393+404)/(1393+156+157+404)
+Sensitivity2 <- 404/(157+404)
+Specificity2 <- 1393/(1393+156)
+accuracy2
+Sensitivity2
+Specificity2
+```
+```{r}
+#(20)
+require(tree)
+model_tree = tree(Churn~., data = train)
+summary(model_tree)
+plot(model_tree)
+text(model_tree, pretty = 0)
+```
+```{r}
+pred2 <- predict(model_tree, type = "vector", newdata = validation)
+pred_churn3 <- factor(ifelse(pred2 >= 0.5, "Yes", "No")) 
+actual_churn3 <- factor(ifelse(validation$Churn == 1, "Yes", "No")) 
+performance3 = table(actual_churn3, pred_churn3)
+performance3
+```
+
