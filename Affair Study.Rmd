@@ -1,0 +1,280 @@
+---
+title: "Affair Study"
+author: "Jianing"
+date: "2023-03-04"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+pt = read.csv("/Users/jianingjin/Desktop/IEMS_304/lab7/affair_pt.csv")
+```
+
+```{r}
+library (caret)
+library (ggplot2)
+library(glmnet)
+library (class)
+library(psych)
+library(regclass)
+library (pROC)
+library (nnet)
+```
+
+```{r}
+#1
+pt = read.csv("affair_pt.csv")
+pt$occupation <- as.factor(pt$occupation)
+pt$gender <- ifelse(pt$gender=="male", 1, 0)
+pt$children <- ifelse(pt$children=="yes", 1, 0)
+pt$cheated <- ifelse(pt$affairs>0, 1, 0)
+pt$affairs <- as.factor(pt$affairs)
+```
+
+```{r}
+#1b)
+# Examine whether collinearity exists in the dataset by a correlation matrix.
+#Let 0.6 be your cutoff for determining collinearity. what are two ways to deal with collinearity?
+# pt Correlation Matrix 1 must not include occupation and affairs because they are categorical, input must be numeric
+#setdiff: find differences between two sets
+ptcort1 <- pt[, setdiff(names(pt), c("occupation", "affairs"))]
+# Prints a boolean matrix if collinearity exists
+cor(ptcort1) > 0.6
+# collinearity exists between age and years married
+# Correlation plot to confirm results
+corPlot(ptcort1)
+# One way to deal with collinearity is to make a combined variable
+# that eliminates the inherent collinearity between the 2 related variables
+ptmarriage_age <- data.frame(0.5*pt$age + 0.5*pt$yearsmarried)
+pt <- cbind(pt, ptmarriage_age)
+names(pt)[length (pt)] <- "Marriage Age"
+ptcort2 <- pt[,setdiff(names (pt), c("occupation", "affairs", "age", "yearsmarried"))]
+# Correlation matrix 2 calculation
+cor(ptcort2) > 0.6
+corPlot (ptcort2)
+# 2 ways to deal with collinearity include: 
+# - Remove one or more of the correlated predictors
+# - Regularization techniques that reduce the impact of highly correlated
+#predictors, such as lasso regression (setting some of the coefficients to 0)
+```
+```{r}
+# 1c)
+# Set_seed=2021. Split the dataset randomly into 80% training and 20% testing.
+set.seed(2021)
+training_percent <- 0.8 
+ptindex_break <- sort(sample(nrow(pt), nrow(pt)*training_percent))
+pt_training <- pt[ptindex_break,]
+pt_testing <- pt[-ptindex_break,]
+
+# 1d)
+# After accounting for the collinearity, build a simple model with
+#"cheated" as the response variable and all other appropriate variables.
+# Simple model appropriate variables should not include affairs
+#(=cheated, not predictor, age and yrs married introduce collinearity)
+simple_model <- glm(cheated ~., data = subset(pt_training, select = c(-affairs, -age, -yearsmarried)), family = binomial)
+summary(simple_model)
+```
+```{r}
+# le)
+# Build a model with a trimmed selection of feature vectors and
+# use it to predict labels on the testing set. Explain your choice
+# of predictor variables. Look at the VIF and determine if these choices are acceptable.
+# Based on simple model summary, only children, religiousness, occupation 4,
+# and rating are significant predictors, as they have p-value less than 0.05
+pttrim_model <- glm(cheated ~ children +religiousness + occupation +rating, 
+                    family = binomial, data = pt_training)
+summary (pttrim_model)
+VIF (pttrim_model)
+# Generally speaking, a VIF (variance inflation factor), close to 1
+# indicates that there is no presence of multicollinearity. A VIF
+# score outside the bounds of 0.25 and 4 indicate multicollinearity
+# might exist and outside the bounds of 0.1 and 10 indicates
+#that multicollinearity does exist. Given the VIF's of all the
+# chosen predictors close to 1, it can be determined that the choices of
+# predictors in the trimmed model are acceptable.
+```
+```{r}
+# 1f)
+# Run the trimmed model on testing data. Plot confusion matrix.
+# comment on whether or not the model is a good model and comment on
+# things that can be improved.
+pt_probabilities <- predict(pttrim_model, pt_testing, type="response")
+pt_predictions <- ifelse(pt_probabilities >= 0.5, 1, 0)
+pt_cm <- confusionMatrix(reference=as.factor(pt_testing$cheated), data = as.factor(pt_predictions))
+pt_cm
+# Based on the confusion matrix, this model does an okay job, with an
+# approximate 79% total accuracy it seems that the model does a great job
+# predicting the behaviors of non-cheaters. A sensitivity of approximately 99%
+#reveals it does a great job of predicting whether or not that person cheated or not.
+#However, the model is very poor at predicting that someone is a cheater given 
+#that they are a cheater. Out of the 28 cheaters, the model only predicted that 
+#4 of them were cheaters, and hence the extremely low specificity rate 
+#and an extremely high false rate of loyalty.
+```
+# 2) exploring the af_RB Dataset
+```{r}
+rb <- read.csv("/Users/jianingjin/Desktop/IEMS_304/lab7/affair_rb.csv")
+```
+
+```{r}
+# 2a)
+# Repeat Steps for RB Dataset
+rb$children <- ifelse(rb$children>0, 1, 0)
+rb$occupation <- as.factor(rb$occupation)
+rb$occupation_husb <- as.factor(rb$occupation_husb)
+# Need to ignore categorical vars when calculating correlation
+rbcort1 <- rb[,setdiff(names(rb), c("occupation", "occupation_husb"))]
+cor(rbcort1) > 0.6
+
+# Age and yrs_married present collinearity issues so I combined into marriage
+# age again
+corPlot (rbcort1)
+rbmarriage_age <- data.frame (0.5*rb$age + 0.5*rb$yrs_married)
+rb <- cbind(rb, rbmarriage_age) 
+names (rb) [length (rb)] <- "Marriage Age"
+rbcort2 <- rb[, setdiff (names(rb), c("occupation", "occupation_husb",                                    "age", "yrs_married"))]
+cor (rbcort2) > 0.6
+corPlot (rbcort2)
+```
+```{r}
+# 2b)
+# Set seed=2021. Split the dataset randomly into 80% training and 20% testing
+set.seed (2021)
+training_percent <- 0.8 
+rbindex_break <- sort(sample(nrow(rb), nrow(rb)*training_percent)) 
+rb_training <- rb[rbindex_break,]
+rb_testing <- rb[-rbindex_break,]
+```
+
+```{r}
+#2c)
+# Naive model with all parameters. You can choose either using
+# (children) or have_children for your
+# predictor variable. You can experiment with both and comment on
+# your insight with the two different approaches.
+naive_model <- glm(affair ~., data = subset(rb_training, select = c(-age, -yrs_married)), family = binomial)
+summary (naive_model)
+```
+```{r}
+# 2d)
+# Similar to first model, create a modified one with skimmed down predictor vars
+rbtrim_model <- glm(affair ~ rate_marriage + children + religious + `Marriage Age`, 
+                    family = binomial, data = rb_training)
+summary (rbtrim_model)
+VIF (rbtrim_model)
+# Generally speaking, a VIF (variance inflation factor), close to 1
+# indicates that there is no presence of multicollinearity. A VIF
+# score outside the bounds of 0.25 and 4 indicate multicollinearity
+# might exist and outside the bounds of 0.1 and 10 indicates
+# that multicollinearity does exist. Given the VIF's of all the chosen
+# predictors are close to 1, it can be determined that the choices of predictors
+# in the skimmed down model are acceptable.
+```
+```{r}
+# 2e)
+# Use the same parameters but use the entire af_RB as a training set and
+# use af_PT as a testing set
+# (note this means you the predictor variables you chose have to match so
+# if they don't, just build the model without the ones that don't exist).
+# Evaluate this model's performance.
+names (rb) [1] <- "rating"
+names (rb) [5] <- "religiousness"
+names (rb) [length(rb)-1] <-"cheated"
+entire_rb_training <- glm(cheated ~ religiousness + rating + children, 
+                          family = binomial, data = rb)
+femalept <- pt[pt$gender==0,]
+femaleProbabilities <- predict(entire_rb_training, femalept, type="response")
+femalePredictions <- ifelse(femaleProbabilities >= 0.5, 1, 0)
+female_cm <- confusionMatrix(reference=as.factor(femalept$cheated), 
+                             data=as.factor(femalePredictions))
+female_cm
+# Once again, this model does an okay job with prediction as the
+# overall accuracy rate is about 75%. This model has a relatively high
+# sensitivity at about 84% and a higher specificity than previous model,
+# although still relatively low, at about 46%. These results are intuitive
+# as the act of cheating is rather erratic and unpredictable behavior, SO
+# it may be more difficult to model. One way to improve this model would be
+# to look for different predictors that do a better job of predicting
+# infidelity when someone has had affairs.
+```
+```{r}
+#2f
+# You work at a firm with its main service being processing social
+# data and selling that data to other companies. One project is on
+# the likelihood of a person having affairs based on his/her data on
+# social media. You'd like to create a primitive model based on the data
+# in af_RB and af_PT for prediction. If you classify an innocent person
+# as having affairs, your company will get sued for defamation (very costly)
+# so your boss wants you to plot a graph of Type I, II error, overall
+# accuracy curve versus threshold parameter between 0,1 with intervals 0.05.
+thresholds <- seq(0,1,0.05)
+overall_error <- rep(0,21)
+t1e <- rep(0,21)
+t2e <- rep(0,21)
+index = 1
+for (i in thresholds) {
+  femalePredictions <- factor(ifelse(femaleProbabilities >= i, 1, 0), levels=c(0,1))
+  cmf <- confusionMatrix(reference=as.factor(femalept$cheated), data=as.factor(femalePredictions))
+# Overall error
+  overall_error[index] = 1 - cmf$overall["Accuracy"]
+# Type 1 Error: False Positive Rate (false loyalty rate, rate at
+# which cheaters are predicted to have been loyal)
+  t1e[index] <- 1 - cmf$byClass["Specificity"]
+# Type 2 Error: False Negative Rate (false cheating rate, rate at
+# which non-cheaters are predicted to have cheated)
+# Defamation implications
+  t2e[index] <- 1 - cmf$byClass["Sensitivity"]
+  index = index + 1
+}
+```
+
+```{r}
+plots <- data.frame(thresholds, overall_error, t1e, t2e)
+ggplot (plots, aes(thresholds)) +
+  geom_line (aes (y=overall_error), color="purple") +
+  geom_line (aes (y=t1e), color="red") +
+  geom_line (aes (y=t2e), color="blue") +
+  ylab ("Error Level") +
+  xlab ("Threshold Level") +
+  ggtitle("Overall Accuracy vs. Different Threshold Parameters")
+```
+```{r}
+# 2h)
+# Train a similar knn model with k = 5 using the caret package and compare auc
+# of knn model and the previous logistic regression model.
+predictors <- c("religiousness", "rating", "children")
+knnpredictions <- knn(as.matrix(rb[predictors]), femalept[predictors], 
+                      cl=as.matrix(rb["cheated"]), k = 5, prob=TRUE)
+knnprobabilities <- attributes (knnpredictions)$prob
+par (pty='s')
+roch <- roc(femalept$cheated, femaleProbabilities, plot=TRUE, legacy.axes=TRUE,
+            percent=TRUE, xlab= "False Positive %", ylab = "True Positive %",
+            print.auc=TRUE, col = "purple")
+plot.roc(femalept$cheated, knnprobabilities, legacy.axes=TRUE, percent=TRUE,
+        print.auc=TRUE, print.auc.y=40, add=TRUE, col="green")
+# The AUC of the logistic model is slightly higher than the AUC fo the knn
+# model, meaning the logistic model was a better classifier and
+# predictor of cheating than the knn model and its specific parameters
+```
+```{r}
+# 3.) Extra Credit
+# Intuitively, multinomial logistic regression is better suited when the
+# dependent variable has more than two categories
+# Given that it is a more general model than logistic regression, it is
+# not restricted to just two categories, but this may
+# sacrifice the accuracy when predicting a factor that has 2 categories.
+# In the case of affairs,
+# cheated: yes or no, which could present a problem for the accuracy of
+# predictions since it has just 2 categories and logistic
+# regression may be a better prediction methodology.
+predictors <- c("religiousness", "rating", "children")
+mnlr <- multinom(affairs~religiousness+rating+children, data = pt_training)
+summary (mnlr)
+
+mnlrpredictions <- predict(mnlr, pt_testing[predictors])
+mnlrpredictions
+#The multinomial logistic regression predicted no cheating, which is
+#obviously false, highlighting the issue with using such a flexible model
+```
+
