@@ -1,0 +1,105 @@
+---
+title: "Predicting and Preventing Strokes"
+author: "Jianing"
+date: "2023-02-28"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+dt <- read.csv("/Users/jianingjin/Desktop/IEMS_304/lab9/healthcare-dataset-stroke-data.csv")
+```
+```{r}
+head(dt)
+```
+
+```{r}
+#a
+library(tidyverse)
+library(corrplot)
+library(MASS)
+library(caret)
+```
+
+```{r}
+#first omit N/A in data
+#HINT: use the na.omit() function
+stroke.data=na.omit(dt)
+with(stroke.data,sum(is.na(stroke.data)))
+#convert categorical variables with numerical encoding
+#E.g: stroke.data$gender <- as.numeric(factor(stroke.data$gender))
+#hint: there should be 6 in total!
+stroke.data$gender <- as.numeric(factor(stroke.data$gender))
+stroke.data$ever_married <- as.numeric(factor(stroke.data$ever_married))
+stroke.data$work_type <- as.numeric(factor(stroke.data$work_type))
+stroke.data$Residence_type <- as.numeric(factor(stroke.data$Residence_type))
+stroke.data$smoking_status <- as.numeric(factor(stroke.data$smoking_status))
+stroke.data$bmi <- as.numeric(factor(stroke.data$bmi))
+#head() allows you to preview the data
+head(stroke.data)
+```
+```{r}
+#b
+set.seed(1234)
+training_ind = sample.int(nrow(stroke.data), nrow(stroke.data) * 0.7)
+train.stroke = stroke.data[training_ind, ]
+test.stroke = stroke.data[-training_ind, ]
+```
+
+```{r}
+#c
+stroke.glm.1 = glm(stroke~., data = train.stroke, family = "binomial")
+summary(stroke.glm.1)
+#4 most significant variables are age, bmi, avg_glucose_level, id. However, because id has no reality mearning, we only use first three variables in the next model.
+```
+```{r}
+#d
+stroke.glm.2 = glm(stroke~age+bmi+avg_glucose_level, data = train.stroke, family = "binomial")
+summary(stroke.glm.2)
+```
+
+```{r}
+#e
+stroke.cor_mat = cor(stroke.data)[, "stroke"]
+stroke.cor_mat[stroke.cor_mat > 0.12]
+```
+
+```{r}
+corrplot(cor(stroke.data),method = "color", tl.col = "black")
+```
+```{r}
+stroke.glm.3 = glm(stroke~age+hypertension+heart_disease+avg_glucose_level, data = train.stroke, family = "binomial")
+summary(stroke.glm.3)
+```
+```{r}
+#f
+sum1 = summary(stroke.glm.1)
+train_pred = predict(stroke.glm.1, data = train.stroke, type = "response")
+test_pred = predict(stroke.glm.1, data = test.stroke, type = "response")
+
+train.mse = mean((train_pred - train.stroke$stroke)^2)
+test.mse = mean((test_pred - test.stroke$stroke)^2)
+
+RSS = sum((train_pred - train.stroke$stroke)^2)
+starting_variance = sum((train.stroke$stroke - mean(train.stroke$stroke))^2)
+train.r2 = 1 - RSS/starting_variance
+
+train.mse
+test.mse
+train.r2
+```
+```{r}
+#g
+friend.bmi = stroke.data$bmi[which(dt$bmi == "17.7")[1]]
+friend.smoking_status =
+stroke.data$smoking_status[which(dt$smoking_status == "formerly smoked")[1]]
+friend.data = data.frame(id = 00713, gender = 1, age = 20, hypertension = 0, heart_disease = 0, ever_married = 0, work_type = 1, Residence_type = 2, avg_glucose_level = 63.71, bmi = friend.bmi, smoking_status = friend.smoking_status)
+friend.data
+```
+```{r}
+predict(stroke.glm.1, newdata = friend.data, type = "response") 
+ifelse(predict(stroke.glm.1, newdata = friend.data, type = "response") > 0.5, 
+       "Have Stroke", "Will not Have Stroke")
+```
+
